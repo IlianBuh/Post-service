@@ -1,0 +1,25 @@
+{
+    "env":"local",
+    "migration-path":"",
+    "storage":{
+        "dbname":"",
+        "user":"",
+        "password":"",
+        "host":"",
+        "port":0,
+        "connection-timeout":"",
+        "ssl": {
+            "sslmode":"", 
+            "sslcert":"",
+            "sslkey":"",
+            "sslrootcert":""
+        }
+    },
+    "grpc": {    
+        "host":"localhost",
+        "port": 9090,
+        "timout": "10s"
+    }
+}
+
+
