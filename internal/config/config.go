@@ -4,48 +4,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/IlianBuh/Post-service/internal/config/grpcobj"
+	"github.com/IlianBuh/Post-service/internal/config/storage"
 	"os"
-	"time"
 )
 
-type Duration struct {
-	time.Duration
-}
-
-func (d *Duration) UnmarshalJSON(b []byte) error {
-
-	value := ""
-	err := json.Unmarshal(b, &value)
-	if err != nil {
-		return err
-	}
-
-	if d.Duration, err = time.ParseDuration(value); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 type Config struct {
-	Env     string  `json:"env"`
-	Storage Storage `json:"storage"`
-	GRPC    GRPCObj `json:"grpc"`
-}
-
-type GRPCObj struct {
-	Host    string   `json:"host"`
-	Port    int      `json:"port"`
-	Timeout Duration `json:"timeout"`
-}
-
-type Storage struct {
-	DBName   string `json:"dbname"`
-	User     string `json:"name"`
-	Password string `json:"password"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Timeout  int    `json:"connection-timeout,omitempty"`
+	Env     string          `json:"env"`
+	Storage storage.Storage `json:"storage"`
+	GRPC    grpcobj.GRPCObj `json:"grpc"`
 }
 
 const (
