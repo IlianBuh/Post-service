@@ -3,7 +3,7 @@ module github.com/IlianBuh/Post-service
 go 1.24.0
 
 require (
-	github.com/IlianBuh/Posts-Protobuf v0.0.2
+	github.com/IlianBuh/Posts-Protobuf v0.0.4
 	google.golang.org/grpc v1.71.1
 )
 
