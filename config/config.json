@@ -2,12 +2,12 @@
     "env":"local",
     "migration-path":"",
     "storage":{
-        "dbname":"",
-        "user":"",
-        "password":"",
-        "host":"",
-        "port":0,
-        "connection-timeout":0,
+        "dbname":"admin",
+        "user":"admin",
+        "password":"admin",
+        "host":"0.0.0.0",
+        "port":5432,
+        "connection-timeout":1000000,
         "ssl": {
             "sslmode":"", 
             "sslcert":"",
