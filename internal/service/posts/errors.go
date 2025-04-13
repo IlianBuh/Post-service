@@ -5,5 +5,5 @@ import (
 )
 
 var (
-	ErrInternal = errors.New("Internal error")
+	ErrInternal = errors.New("internal error")
 )
