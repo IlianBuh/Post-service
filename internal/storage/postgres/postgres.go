@@ -211,7 +211,7 @@ func (s *Storage) Update(
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
-	rec, err = s.newPostRec(ctx, postId, userId, header, content)
+	rec, err = s.updatePostRec(ctx, postId, userId, header, content)
 	if err != nil {
 		return sendErr(err)
 	}
@@ -261,8 +261,8 @@ func (s *Storage) update(
 	return nil
 }
 
-// newPostRec creates a record for new post information
-func (s *Storage) newPostRec(
+// updatePostRec creates a record for new post information
+func (s *Storage) updatePostRec(
 	ctx context.Context,
 	postId int,
 	userId int,
@@ -342,6 +342,93 @@ func (s *Storage) updateThemes(
 	err = s.savePostThemeRelations(ctx, tx, postId, thmIds)
 	if err != nil {
 		return sendErr(err)
+	}
+
+	return nil
+}
+
+func (s *Storage) Delete(
+	ctx context.Context,
+	postId int,
+	userId int,
+) error {
+	const op = "postgres.Delete"
+	sendErr := func(err error) error {
+		return fail(op, err)
+	}
+
+	ctx, cncl := context.WithCancel(ctx)
+	defer cncl()
+
+	rec, err := s.post(ctx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	if !s.isCreator(rec.userId, userId) {
+		return sendErr(storage.ErrNotCreator)
+	}
+
+	err = s.delete(ctx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	return nil
+}
+
+// delete deletes all information related to post with the postId
+func (s *Storage) delete(
+	ctx context.Context,
+	postId int,
+) error {
+	const (
+		op = "postgres.delete"
+	)
+	sendErr := func(err error) error {
+		return fail(op, err)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return sendErr(err)
+	}
+	defer tx.Rollback()
+
+	err = s.deletePost(ctx, tx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = s.deleteRelations(ctx, tx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return sendErr(err)
+	}
+
+	return nil
+}
+
+// deletePost deletes post with the postId
+func (s *Storage) deletePost(
+	ctx context.Context,
+	tx *sql.Tx,
+	postId int,
+) error {
+	const (
+		op       = "postgres.deletePost"
+		dltQuery = `
+			DELETE FROM posts WHERE post_id=$1;
+		`
+	)
+
+	_, err := tx.ExecContext(ctx, dltQuery, postId)
+	if err != nil {
+		return fail(op, err)
 	}
 
 	return nil
