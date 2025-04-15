@@ -4,15 +4,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/IlianBuh/Post-service/internal/config/grpcobj"
 	"github.com/IlianBuh/Post-service/internal/config/storage"
-	"os"
+	userProvider "github.com/IlianBuh/Post-service/internal/config/user-provider"
 )
 
 type Config struct {
-	Env     string          `json:"env"`
-	Storage storage.Storage `json:"storage"`
-	GRPC    grpcobj.GRPCObj `json:"grpc"`
+	Env          string                    `json:"env"`
+	Storage      storage.Storage           `json:"storage"`
+	GRPC         grpcobj.GRPCObj           `json:"grpc"`
+	UserProvider userProvider.UserProvider `json:"user-provider"`
 }
 
 const (
