@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/IlianBuh/Post-service/internal/storage"
 	_ "github.com/lib/pq"
 )
 
 type Storage struct {
 	db *sql.DB
 }
-type tpost struct {
+type record struct {
 	postId  int
 	userId  int
 	header  string
@@ -88,60 +89,6 @@ func (s *Storage) Save(
 	return postId, nil
 }
 
-// func (s *Storage) Update(
-// 	ctx context.Context,
-// 	postId int,
-// 	userId int,
-// 	header string,
-// 	content string,
-// 	themes []string,
-// ) (int, error) {
-// 	const (
-// 		op = "postgres.Update"
-// 	)
-// 	var (
-// 		err error
-// 		wg  *sync.WaitGroup
-// 	)
-// 	if err := ctx.Err(); err != nil {
-// 		return 0, fail(op, err)
-// 	}
-// 	ctx, cncl := context.WithCancel(ctx)
-// 	defer cncl()
-
-// 	tx, err := s.db.BeginTx(ctx, nil)
-// 	if err != nil {
-// 		return 0, fail(op, err)
-// 	}
-// 	defer tx.Rollback()
-
-// 	wg.Add(2)
-// 	idCh, resCh, errCh := make(chan int, 1), make(chan int, 1), make(chan error, 2)
-// 	defer func() {
-// 		wg.Wait()
-// 		close(idCh)
-// 		close(resCh)
-// 		close(errCh)
-// 	}()
-// 	go func() {
-// 		defer wg.Done()
-// 		s.updatePost(ctx, tx, postId, userId, &header, &content, idCh, errCh)
-// 	}()
-// 	go func() {
-// 		defer wg.Done()
-// 		s.updateThemes(ctx, tx, themes, idCh, resCh, errCh)
-// 	}()
-// 	select {}
-// 	// TODO : fix themes
-
-// }
-
-// fail assembles a new error with define structure
-// Error message has pattern 'op':'err'
-func fail(op string, err error) error {
-	return fmt.Errorf("%s: %w", op, err)
-}
-
 // save saves new post, themes and all new relations
 func (s *Storage) save(
 	ctx context.Context,
@@ -171,34 +118,6 @@ func (s *Storage) save(
 	}
 
 	return postId, nil
-}
-
-// fetchAllIds fetches ids of the post and all themes. under hood it parallels fetching of  post's id and theme's ids
-func (s *Storage) fetchAllIds(
-	ctx context.Context,
-	tx *sql.Tx,
-	userId int,
-	header *string,
-	content *string,
-	themes []string,
-) (postId int, thmIds []int, err error) {
-	const op = "fetchAllIds"
-
-	sendErr := func(err error) (int, []int, error) {
-		return 0, nil, fail(op, err)
-	}
-
-	thmIds, err = s.loadThemeIds(ctx, tx, themes)
-	if err != nil {
-		return sendErr(err)
-	}
-
-	postId, err = s.savePost(ctx, tx, userId, header, content)
-	if err != nil {
-		return sendErr(err)
-	}
-
-	return postId, thmIds, nil
 }
 
 // savePost saves new post and returns post id
@@ -234,8 +153,230 @@ func (s *Storage) savePost(
 	return postId, nil
 }
 
-//	 loadThemeIds loads id by theme names from slice. If name does not exist
-//		in database new theme is created and the id of the new theme is returned
+// savePostThemeRelations make notes for matching themes to post
+func (*Storage) savePostThemeRelations(
+	ctx context.Context,
+	tx *sql.Tx,
+	postId int,
+	thmIds []int,
+) error {
+	const (
+		op                      = "postgres.savePostThemeRelations"
+		insertPostThemeRelation = `
+			INSERT INTO post_theme(post_id, theme_id)
+			VALUES($1, $2)`
+	)
+	sendErr := func(err error) error {
+		return fail(op, err)
+	}
+
+	insrtStmt, err := tx.PrepareContext(ctx, insertPostThemeRelation)
+	if err != nil {
+		return sendErr(err)
+	}
+	defer insrtStmt.Close()
+
+	for _, themeId := range thmIds {
+
+		_, err = insrtStmt.ExecContext(ctx, postId, themeId)
+		if err != nil {
+			return sendErr(err)
+		}
+
+	}
+
+	return nil
+}
+
+func (s *Storage) Update(
+	ctx context.Context,
+	postId int,
+	userId int,
+	header string,
+	content string,
+	themes []string,
+) (int, error) {
+	const op = "postgres.Update"
+	var (
+		err error
+		rec record
+	)
+	sendErr := func(err error) (int, error) {
+		return 0, fail(op, err)
+	}
+
+	if err = ctx.Err(); err != nil {
+		return sendErr(err)
+	}
+	ctx, cncl := context.WithCancel(ctx)
+	defer cncl()
+
+	rec, err = s.newPostRec(ctx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = s.update(ctx, rec, themes)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	return postId, nil
+}
+
+// update updates all information related to the post that has the postId
+func (s *Storage) update(
+	ctx context.Context,
+	rec record,
+	themes []string,
+) error {
+	const (
+		op = "postgres.update"
+	)
+	sendErr := func(err error) error {
+		return fail(op, err)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return sendErr(err)
+	}
+	defer tx.Rollback()
+
+	err = s.updatePost(ctx, tx, &rec)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = s.updateThemes(ctx, tx, rec.postId, themes)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return sendErr(err)
+	}
+
+	return nil
+}
+
+// newPostRec creates a record for new post information
+func (s *Storage) newPostRec(
+	ctx context.Context,
+	postId int,
+	userId int,
+	header string,
+	content string,
+) (record, error) {
+	const (
+		op = "postgres.newPostRec"
+	)
+	sendErr := func(err error) (record, error) {
+		return record{}, fail(op, err)
+	}
+
+	rec, err := s.post(ctx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	if rec.userId != userId {
+		return sendErr(storage.ErrNotCreator)
+	}
+
+	if header != "" {
+		rec.header = header
+	}
+	if content != "" {
+		rec.content = content
+	}
+
+	return rec, nil
+}
+
+// updatePost updates post records with replacing content and header
+func (s *Storage) updatePost(
+	ctx context.Context,
+	tx *sql.Tx,
+	post *record,
+) error {
+	const (
+		op        = "postgres.updatePost"
+		updtQuery = `
+			UPDATE posts SET header=$1, content=$2 WHERE post_id=$3`
+	)
+
+	_, err := tx.ExecContext(ctx, updtQuery, post.header, post.content, post.postId)
+	if err != nil {
+		return fail(op, err)
+	}
+
+	return nil
+}
+
+// updateThemes updates list of themes that match to post with postId
+func (s *Storage) updateThemes(
+	ctx context.Context,
+	tx *sql.Tx,
+	postId int,
+	themes []string,
+) error {
+	const (
+		op = "postgres.updateThemes"
+	)
+	sendErr := func(err error) error {
+		return fail(op, err)
+	}
+
+	thmIds, err := s.loadThemeIds(ctx, tx, themes)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = s.deleteRelations(ctx, tx, postId)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	err = s.savePostThemeRelations(ctx, tx, postId, thmIds)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	return nil
+}
+
+// fetchAllIds fetches ids of the post and all themes. under hood it parallels fetching of  post's id and theme's ids
+func (s *Storage) fetchAllIds(
+	ctx context.Context,
+	tx *sql.Tx,
+	userId int,
+	header *string,
+	content *string,
+	themes []string,
+) (postId int, thmIds []int, err error) {
+	const op = "fetchAllIds"
+
+	sendErr := func(err error) (int, []int, error) {
+		return 0, nil, fail(op, err)
+	}
+
+	thmIds, err = s.loadThemeIds(ctx, tx, themes)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	postId, err = s.savePost(ctx, tx, userId, header, content)
+	if err != nil {
+		return sendErr(err)
+	}
+
+	return postId, thmIds, nil
+}
+
+// loadThemeIds loads id by theme names from slice. If name does not exist
+// in database new theme is created and the id of the new theme is returned
 func (*Storage) loadThemeIds(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -296,192 +437,55 @@ func (*Storage) loadThemeIds(
 	return themeIds, nil
 }
 
-func (*Storage) savePostThemeRelations(
+// post returns record with posts' information
+func (s *Storage) post(
+	ctx context.Context,
+	postId int,
+) (record, error) {
+	const (
+		op        = "postgres.post"
+		slctQuery = `
+			SELECT post_id, user_id, header, content
+			FROM posts
+			WHERE post_id = $1;
+		`
+	)
+	var rec record
+
+	row := s.db.QueryRowContext(ctx, slctQuery, postId)
+	if err := row.Scan(&rec.postId, &rec.userId, &rec.header, &rec.content); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return rec, fail(op, storage.ErrNotFound)
+		}
+
+		return rec, fail(op, err)
+	}
+
+	return rec, nil
+}
+
+func (s *Storage) deleteRelations(
 	ctx context.Context,
 	tx *sql.Tx,
 	postId int,
-	thmIds []int,
 ) error {
 	const (
-		op                      = "postgres.savePostThemeRelations"
-		insertPostThemeRelation = `
-			INSERT INTO post_theme(post_id, theme_id)
-			VALUES($1, $2)`
+		op               = "postgres.deleteRelations"
+		dltRelationQuery = `
+			DELETE FROM post_theme WHERE post_id=$1;
+		`
 	)
-	sendErr := func(err error) error {
-		return fail(op, err)
-	}
 
-	insrtStmt, err := tx.PrepareContext(ctx, insertPostThemeRelation)
+	_, err := tx.ExecContext(ctx, dltRelationQuery, postId)
 	if err != nil {
-		return sendErr(err)
-	}
-	defer insrtStmt.Close()
-
-	for _, themeId := range thmIds {
-
-		_, err = insrtStmt.ExecContext(ctx, postId, themeId)
-		if err != nil {
-			return sendErr(err)
-		}
-
+		return fail(op, err)
 	}
 
 	return nil
 }
 
-// func (s *Storage) updatePost(
-// 	ctx context.Context,
-// 	tx *sql.Tx,
-// 	postId int,
-// 	userId int,
-// 	header *string,
-// 	content *string,
-// 	idCh chan int,
-// 	errCh chan error,
-// ) {
-// 	const (
-// 		op         = "postgres.updatePost"
-// 		selectPost = `
-// 			SELECT *
-// 			FROM   posts
-// 			WHERE post_id=$1`
-// 		update = `
-// 			UPDATE posts SET header=$1, content=$2`
-// 	)
-// 	var err error
-
-// 	row := tx.QueryRowContext(ctx, selectPost, postId)
-// 	post := tpost{}
-// 	if err = row.Scan(&post.postId, &post.userId, &post.header, &post.content); err != nil {
-
-// 		if errors.Is(err, sql.ErrNoRows) {
-// 			idCh <- 0
-// 			s.tryWError(errCh, fail(op, storage.ErrNotFound))
-// 		} else {
-// 			idCh <- 0
-// 			s.tryWError(errCh, fail(op, err))
-// 		}
-
-// 	}
-// 	if userId != post.userId {
-// 		idCh <- 0
-// 		s.tryWError(errCh, fail(op, storage.ErrNotCreator))
-// 	}
-
-// 	if *header != "" {
-// 		post.header = *header
-// 	}
-// 	if *content != "" {
-// 		post.content = *content
-// 	}
-
-// 	_, err = tx.ExecContext(ctx, update, post.content, post.header)
-// 	if err != nil {
-// 		idCh <- 0
-// 		s.tryWError(errCh, fail(op, err))
-// 	}
-
-// }
-
-// func (s *Storage) updateThemes(
-// 	ctx context.Context,
-// 	tx *sql.Tx,
-// 	themes []string,
-// 	idCh chan int,
-// 	resCh chan int,
-// 	errCh chan error,
-// ) {
-// 	const (
-// 		op           = "postgres.updateThemes"
-// 		deleteThemes = `
-// 			DELETE FROM post_theme WHERE post_id=$1`
-// 	)
-// 	var (
-// 		postId int
-// 		err    error
-// 		wg     *sync.WaitGroup
-// 	)
-
-// 	wg.Add(1)
-// 	_idCh, _resCh := make(chan int, 1), make(chan int, 1)
-// 	defer func() {
-// 		wg.Wait()
-// 		close(_idCh)
-// 		close(_resCh)
-// 	}()
-// 	go func() {
-// 		defer wg.Done()
-// 		s.saveThemes(ctx, tx, themes, _idCh, _resCh, errCh)
-// 	}()
-
-// 	select {
-// 	case postId = <-idCh:
-// 	case err = <-errCh:
-// 		s.tryWError(errCh, fail(op, err))
-// 		return
-// 	case <-ctx.Done():
-// 		s.tryWError(errCh, fail(op, ctx.Err()))
-// 		return
-// 	}
-
-// 	_, err = tx.ExecContext(ctx, deleteThemes, postId)
-// 	if err != nil {
-// 		s.tryWError(errCh, fail(op, err))
-// 		return
-// 	}
-
-// 	select {
-// 	case _idCh <- postId:
-// 	default:
-// 		s.tryWError(errCh, fail(op, storage.ErrBlockedChannel))
-// 		return
-// 	}
-
-// }
-
-func readChan[T any](
-	ch chan T,
-	errCh chan error,
-) (T, error) {
-	var res T
-
-	select {
-	case res = <-ch:
-	case err := <-errCh:
-		return res, err
-	}
-
-	return res, nil
+// fail assembles a new error with define structure
+// Error message has pattern 'op':'err'
+func fail(op string, err error) error {
+	return fmt.Errorf("%s: %w", op, err)
 }
-
-// func (s *Storage) T() {
-// 	tx, err := s.db.Begin()
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-
-// 	// stmt, err := tx.Prepare(`SELECT * FROM themes`)
-// 	// if err != nil {
-// 	// 	panic("stmt" + err.Error())
-// 	// }
-
-// 	rows := tx.QueryRow("SELECT * FROM themes")
-// 	stms2, err := tx.Prepare(`INSERT INTO post_theme(post_id, theme_id) VALUES($1, $1) `)
-// 	if err != nil {
-// 		panic("stms2" + err.Error())
-// 	}
-// 	if err != nil {
-// 		panic("rows" + err.Error())
-// 	}
-// 	_ = rows
-// 	// for rows.Next() {
-// 	// }
-
-// 	rows2, err := stms2.Query(0)
-// 	if err != nil {
-// 		panic("rows2" + err.Error())
-// 	}
-// 	_ = rows2
-// 	tx.Commit()
-// }
