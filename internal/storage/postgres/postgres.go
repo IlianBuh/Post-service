@@ -576,6 +576,19 @@ func (s *Storage) isCreator(recUserId, userId int) bool {
 	return recUserId == userId
 }
 
+// Stop stops working of storage entity
+func (s *Storage) Stop() error {
+	const (
+		op = "postgres.Stop"
+	)
+	err := s.db.Close()
+	if err != nil {
+		return fail(op, storage.ErrClose)
+	}
+
+	return nil
+}
+
 // fail assembles a new error with define structure
 // Error message has pattern 'op':'err'
 func fail(op string, err error) error {
