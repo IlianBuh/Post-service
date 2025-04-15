@@ -211,7 +211,7 @@ func (s *Storage) Update(
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
-	rec, err = s.newPostRec(ctx, postId)
+	rec, err = s.newPostRec(ctx, postId, userId, header, content)
 	if err != nil {
 		return sendErr(err)
 	}
@@ -281,7 +281,7 @@ func (s *Storage) newPostRec(
 		return sendErr(err)
 	}
 
-	if rec.userId != userId {
+	if !s.isCreator(rec.userId, userId) {
 		return sendErr(storage.ErrNotCreator)
 	}
 
@@ -482,6 +482,11 @@ func (s *Storage) deleteRelations(
 	}
 
 	return nil
+}
+
+// isCreator checks is the user creator of the record
+func (s *Storage) isCreator(recUserId, userId int) bool {
+	return recUserId == userId
 }
 
 // fail assembles a new error with define structure
