@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sync"
 
-	"github.com/IlianBuh/Post-service/internal/storage"
 	_ "github.com/lib/pq"
 )
 
@@ -63,7 +61,6 @@ func (s *Storage) Save(
 	var (
 		err    error
 		postId int
-		wg     *sync.WaitGroup
 	)
 
 	if err = ctx.Err(); err != nil {
@@ -78,87 +75,66 @@ func (s *Storage) Save(
 	}
 	defer tx.Rollback()
 
-	wg.Add(2)
-	idCh, resCh, errCh := make(chan int, 1), make(chan int, 1), make(chan error, 1)
-	errOnce := &sync.Once{}
-	defer func() {
-		wg.Wait()
-		close(idCh)
-		close(resCh)
-		close(errCh)
-	}()
-	go func() {
-		defer wg.Done()
-		s.savePost(ctx, tx, userId, &header, &content, idCh, errCh, errOnce)
-	}()
-	go func() {
-		defer wg.Done()
-		s.saveThemes(ctx, tx, themes, idCh, resCh, errCh, errOnce)
-	}()
-
-	select {
-	case postId = <-resCh:
-	case err = <-errCh:
-		cncl()
+	postId, err = s.save(ctx, tx, userId, &header, &content, themes)
+	if err != nil {
 		return 0, fail(op, err)
-	case <-ctx.Done():
-		return 0, fail(op, ctx.Err())
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		return 0, fail(op, err)
 	}
+
 	return postId, nil
 }
 
-func (s *Storage) Update(
-	ctx context.Context,
-	postId int,
-	userId int,
-	header string,
-	content string,
-	themes []string,
-) (int, error) {
-	const (
-		op = "postgres.Update"
-	)
-	var (
-		err error
-		wg  *sync.WaitGroup
-	)
-	if err := ctx.Err(); err != nil {
-		return 0, fail(op, err)
-	}
-	ctx, cncl := context.WithCancel(ctx)
-	defer cncl()
+// func (s *Storage) Update(
+// 	ctx context.Context,
+// 	postId int,
+// 	userId int,
+// 	header string,
+// 	content string,
+// 	themes []string,
+// ) (int, error) {
+// 	const (
+// 		op = "postgres.Update"
+// 	)
+// 	var (
+// 		err error
+// 		wg  *sync.WaitGroup
+// 	)
+// 	if err := ctx.Err(); err != nil {
+// 		return 0, fail(op, err)
+// 	}
+// 	ctx, cncl := context.WithCancel(ctx)
+// 	defer cncl()
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fail(op, err)
-	}
-	defer tx.Rollback()
+// 	tx, err := s.db.BeginTx(ctx, nil)
+// 	if err != nil {
+// 		return 0, fail(op, err)
+// 	}
+// 	defer tx.Rollback()
 
-	wg.Add(2)
-	idCh, resCh, errCh := make(chan int, 1), make(chan int, 1), make(chan error, 2)
-	defer func() {
-		wg.Wait()
-		close(idCh)
-		close(resCh)
-		close(errCh)
-	}()
-	go func() {
-		defer wg.Done()
-		s.updatePost(ctx, tx, postId, userId, &header, &content, idCh, errCh)
-	}()
-	go func() {
-		defer wg.Done()
-		s.updateThemes(ctx, tx, themes, idCh, resCh, errCh)
-	}()
-	select {}
-	// TODO : fix themes
+// 	wg.Add(2)
+// 	idCh, resCh, errCh := make(chan int, 1), make(chan int, 1), make(chan error, 2)
+// 	defer func() {
+// 		wg.Wait()
+// 		close(idCh)
+// 		close(resCh)
+// 		close(errCh)
+// 	}()
+// 	go func() {
+// 		defer wg.Done()
+// 		s.updatePost(ctx, tx, postId, userId, &header, &content, idCh, errCh)
+// 	}()
+// 	go func() {
+// 		defer wg.Done()
+// 		s.updateThemes(ctx, tx, themes, idCh, resCh, errCh)
+// 	}()
+// 	select {}
+// 	// TODO : fix themes
 
-}
+// }
 
 // fail assembles a new error with define structure
 // Error message has pattern 'op':'err'
@@ -176,36 +152,22 @@ func (s *Storage) save(
 	themes []string,
 ) (int, error) {
 	const (
-		op                      = "storage.saveThemes"
-		insertPostThemeRelation = `
-			INSERT INTO post_theme(post_id, theme_id)
-			VALUES($1, $2)`
+		op = "storage.saveThemes"
 	)
-
+	sendErr := func(err error) (int, error) {
+		return 0, fail(op, err)
+	}
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
-	postId, thmIds, err := s.fetchAllIds(ctx, cncl, tx, userId, header, content, themes)
+	postId, thmIds, err := s.fetchAllIds(ctx, tx, userId, header, content, themes)
 	if err != nil {
-		return 0, fail(op, err)
+		return sendErr(err)
 	}
 
-	insrtStmt, err := tx.PrepareContext(ctx, insertPostThemeRelation)
+	err = s.savePostThemeRelations(ctx, tx, postId, thmIds)
 	if err != nil {
-		errOnce.Do(func() {
-			errCh <- fail(op, err)
-		})
-		return
-	}
-	defer insrtStmt.Close()
-
-	for _, themeId := range thmIds {
-
-		_, err = insrtStmt.ExecContext(ctx, postId, themeId)
-		if err != nil {
-			return 0, fail(op, err)
-		}
-
+		return sendErr(err)
 	}
 
 	return postId, nil
@@ -214,131 +176,105 @@ func (s *Storage) save(
 // fetchAllIds fetches ids of the post and all themes. under hood it parallels fetching of  post's id and theme's ids
 func (s *Storage) fetchAllIds(
 	ctx context.Context,
-	cncl context.CancelFunc,
 	tx *sql.Tx,
 	userId int,
 	header *string,
 	content *string,
 	themes []string,
 ) (postId int, thmIds []int, err error) {
-	var (
-		wg *sync.WaitGroup
-	)
+	const op = "fetchAllIds"
 
-	fail := func(err error) (int, []int, error) {
-		return 0, nil, err
+	sendErr := func(err error) (int, []int, error) {
+		return 0, nil, fail(op, err)
 	}
 
-	wg.Add(2)
-	ldThmIdsCh, svPstCh := make(chan intSliceToChan, 1), make(chan intToChan, 1)
-	defer func() {
-		wg.Wait()
-		close(ldThmIdsCh)
-		close(svPstCh)
-	}()
-	go func() {
-		defer wg.Done()
-		s.loadThemeIds(ctx, tx, themes, ldThmIdsCh)
-	}()
-	go func() {
-		defer wg.Done()
-		s.savePost(ctx, tx, userId, header, content, svPstCh)
-	}()
-
-	thmIdsCh, postIdCh := make(chan intSliceToChan, 1), make(chan intToChan, 1)
-	go readChan(ctx, cncl, postIdCh, svPstCh)
-	go readChan(ctx, cncl, thmIdsCh, ldThmIdsCh)
-
-	postIdRes := <-postIdCh
-	if postIdRes.err != nil {
-		cncl()
-		return fail(err)
-	} else {
-		postId = postIdRes.val
+	thmIds, err = s.loadThemeIds(ctx, tx, themes)
+	if err != nil {
+		return sendErr(err)
 	}
-	thmIdsRes := <-thmIdsCh
-	if thmIdsRes.err != nil {
-		cncl()
-		return fail(err)
-	} else {
-		thmIds = thmIdsRes.val
+
+	postId, err = s.savePost(ctx, tx, userId, header, content)
+	if err != nil {
+		return sendErr(err)
 	}
 
 	return postId, thmIds, nil
 }
 
-// savePost saves new post and returns post id through result channel
+// savePost saves new post and returns post id
 func (s *Storage) savePost(
 	ctx context.Context,
 	tx *sql.Tx,
 	userId int,
 	header *string,
 	content *string,
-	resCh chan intToChan,
-) {
-	const op = "postgres.savePost"
-	const insertNewPost = `
-		INSERT INTO posts(user_id, header, content)
-		VALUES($1, $2, $3)
-		RETURNING post_id`
+) (postId int, err error) {
+	const (
+		op            = "postgres.savePost"
+		insertNewPost = `
+			INSERT INTO posts(user_id, header, content)
+			VALUES($1, $2, $3)
+			RETURNING post_id`
+	)
+	sendErr := func(err error) (int, error) {
+		return 0, fail(op, err)
+	}
 
 	insrtStmt, err := tx.PrepareContext(ctx, insertNewPost)
 	if err != nil {
-		resCh <- intToChan{0, fail(op, err)}
-		return
+		return sendErr(err)
 	}
 	defer insrtStmt.Close()
 
-	var postId int
 	row := insrtStmt.QueryRowContext(ctx, userId, *header, *content)
 	if err = row.Scan(&postId); err != nil {
-		resCh <- intToChan{0, fail(op, err)}
-		return
+		return sendErr(err)
 	}
 
-	resCh <- intToChan{postId, nil}
+	return postId, nil
 }
 
-// loadThemeIds loads id by theme names from slice. If name does not exist
-//
-//	in database new theme is created and the id of the new theme is returned
+//	 loadThemeIds loads id by theme names from slice. If name does not exist
+//		in database new theme is created and the id of the new theme is returned
 func (*Storage) loadThemeIds(
 	ctx context.Context,
-	tx *sql.Tx, themes []string,
-	resCh chan intSliceToChan,
-) {
-	const op = "postgres.LoadThemeIds"
-	const selectThemeQuery = `
-		SELECT theme_id
-		FROM themes
-		WHERE theme_name=$1`
-	const insertNewTheme = `
-		INSERT INTO themes(theme_name) 
-		VALUES ($1)
-		RETURNING theme_id`
+	tx *sql.Tx,
+	themes []string,
+) (themeIds []int, err error) {
+	const (
+		op               = "postgres.LoadThemeIds"
+		selectThemeQuery = `
+			SELECT theme_id
+			FROM themes
+			WHERE theme_name=$1;`
+		insertNewTheme = `
+			INSERT INTO themes(theme_name) 
+			VALUES ($1)
+			RETURNING theme_id`
+	)
+
+	sendErr := func(err error) ([]int, error) {
+		return nil, fail(op, err)
+	}
 
 	slctStmt, err := tx.PrepareContext(ctx, selectThemeQuery)
 	if err != nil {
-		resCh <- intSliceToChan{nil, fail(op, err)}
-		return
+		return sendErr(err)
 	}
 	defer slctStmt.Close()
 
 	insrtStmt, err := tx.PrepareContext(ctx, insertNewTheme)
 	if err != nil {
-		resCh <- intSliceToChan{nil, fail(op, err)}
-
-		return
+		return sendErr(err)
 	}
 	defer insrtStmt.Close()
 
-	themeIds := make([]int, len(themes))
+	themeIds = make([]int, len(themes))
 	var id int
 	for i, theme := range themes {
 		select {
 		case <-ctx.Done():
-			resCh <- intSliceToChan{nil, fail(op, ctx.Err())}
-			return
+			return sendErr(ctx.Err())
 		default:
 		}
 
@@ -347,157 +283,205 @@ func (*Storage) loadThemeIds(
 		if err = row.Scan(&id); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				if err = insrtStmt.QueryRowContext(ctx, theme).Scan(&id); err != nil {
-					resCh <- intSliceToChan{nil, fail(op, err)}
-					return
+					return sendErr(err)
 				}
 			} else {
-				resCh <- intSliceToChan{nil, fail(op, err)}
-				return
+				return sendErr(err)
 			}
 		}
 
 		themeIds[i] = id
 	}
 
-	resCh <- intSliceToChan{themeIds, nil}
-	return
+	return themeIds, nil
 }
 
-func (s *Storage) updatePost(
+func (*Storage) savePostThemeRelations(
 	ctx context.Context,
 	tx *sql.Tx,
 	postId int,
-	userId int,
-	header *string,
-	content *string,
-	idCh chan int,
-	errCh chan error,
-) {
+	thmIds []int,
+) error {
 	const (
-		op         = "postgres.updatePost"
-		selectPost = `
-			SELECT *
-			FROM   posts
-			WHERE post_id=$1`
-		update = `
-			UPDATE posts SET header=$1, content=$2`
+		op                      = "postgres.savePostThemeRelations"
+		insertPostThemeRelation = `
+			INSERT INTO post_theme(post_id, theme_id)
+			VALUES($1, $2)`
 	)
-	var err error
+	sendErr := func(err error) error {
+		return fail(op, err)
+	}
 
-	row := tx.QueryRowContext(ctx, selectPost, postId)
-	post := tpost{}
-	if err = row.Scan(&post.postId, &post.userId, &post.header, &post.content); err != nil {
+	insrtStmt, err := tx.PrepareContext(ctx, insertPostThemeRelation)
+	if err != nil {
+		return sendErr(err)
+	}
+	defer insrtStmt.Close()
 
-		if errors.Is(err, sql.ErrNoRows) {
-			idCh <- 0
-			s.tryWError(errCh, fail(op, storage.ErrNotFound))
-		} else {
-			idCh <- 0
-			s.tryWError(errCh, fail(op, err))
+	for _, themeId := range thmIds {
+
+		_, err = insrtStmt.ExecContext(ctx, postId, themeId)
+		if err != nil {
+			return sendErr(err)
 		}
 
 	}
-	if userId != post.userId {
-		idCh <- 0
-		s.tryWError(errCh, fail(op, storage.ErrNotCreator))
-	}
 
-	if *header != "" {
-		post.header = *header
-	}
-	if *content != "" {
-		post.content = *content
-	}
-
-	_, err = tx.ExecContext(ctx, update, post.content, post.header)
-	if err != nil {
-		idCh <- 0
-		s.tryWError(errCh, fail(op, err))
-	}
-
+	return nil
 }
 
-func (s *Storage) updateThemes(
-	ctx context.Context,
-	tx *sql.Tx,
-	themes []string,
-	idCh chan int,
-	resCh chan int,
-	errCh chan error,
-) {
-	const (
-		op           = "postgres.updateThemes"
-		deleteThemes = `
-			DELETE FROM post_theme WHERE post_id=$1`
-	)
-	var (
-		postId int
-		err    error
-		wg     *sync.WaitGroup
-	)
+// func (s *Storage) updatePost(
+// 	ctx context.Context,
+// 	tx *sql.Tx,
+// 	postId int,
+// 	userId int,
+// 	header *string,
+// 	content *string,
+// 	idCh chan int,
+// 	errCh chan error,
+// ) {
+// 	const (
+// 		op         = "postgres.updatePost"
+// 		selectPost = `
+// 			SELECT *
+// 			FROM   posts
+// 			WHERE post_id=$1`
+// 		update = `
+// 			UPDATE posts SET header=$1, content=$2`
+// 	)
+// 	var err error
 
-	wg.Add(1)
-	_idCh, _resCh := make(chan int, 1), make(chan int, 1)
-	defer func() {
-		wg.Wait()
-		close(_idCh)
-		close(_resCh)
-	}()
-	go func() {
-		defer wg.Done()
-		s.saveThemes(ctx, tx, themes, _idCh, _resCh, errCh)
-	}()
+// 	row := tx.QueryRowContext(ctx, selectPost, postId)
+// 	post := tpost{}
+// 	if err = row.Scan(&post.postId, &post.userId, &post.header, &post.content); err != nil {
 
-	select {
-	case postId = <-idCh:
-	case err = <-errCh:
-		s.tryWError(errCh, fail(op, err))
-		return
-	case <-ctx.Done():
-		s.tryWError(errCh, fail(op, ctx.Err()))
-		return
-	}
+// 		if errors.Is(err, sql.ErrNoRows) {
+// 			idCh <- 0
+// 			s.tryWError(errCh, fail(op, storage.ErrNotFound))
+// 		} else {
+// 			idCh <- 0
+// 			s.tryWError(errCh, fail(op, err))
+// 		}
 
-	_, err = tx.ExecContext(ctx, deleteThemes, postId)
-	if err != nil {
-		s.tryWError(errCh, fail(op, err))
-		return
-	}
+// 	}
+// 	if userId != post.userId {
+// 		idCh <- 0
+// 		s.tryWError(errCh, fail(op, storage.ErrNotCreator))
+// 	}
 
-	select {
-	case _idCh <- postId:
-	default:
-		s.tryWError(errCh, fail(op, storage.ErrBlockedChannel))
-		return
-	}
+// 	if *header != "" {
+// 		post.header = *header
+// 	}
+// 	if *content != "" {
+// 		post.content = *content
+// 	}
 
-}
+// 	_, err = tx.ExecContext(ctx, update, post.content, post.header)
+// 	if err != nil {
+// 		idCh <- 0
+// 		s.tryWError(errCh, fail(op, err))
+// 	}
+
+// }
+
+// func (s *Storage) updateThemes(
+// 	ctx context.Context,
+// 	tx *sql.Tx,
+// 	themes []string,
+// 	idCh chan int,
+// 	resCh chan int,
+// 	errCh chan error,
+// ) {
+// 	const (
+// 		op           = "postgres.updateThemes"
+// 		deleteThemes = `
+// 			DELETE FROM post_theme WHERE post_id=$1`
+// 	)
+// 	var (
+// 		postId int
+// 		err    error
+// 		wg     *sync.WaitGroup
+// 	)
+
+// 	wg.Add(1)
+// 	_idCh, _resCh := make(chan int, 1), make(chan int, 1)
+// 	defer func() {
+// 		wg.Wait()
+// 		close(_idCh)
+// 		close(_resCh)
+// 	}()
+// 	go func() {
+// 		defer wg.Done()
+// 		s.saveThemes(ctx, tx, themes, _idCh, _resCh, errCh)
+// 	}()
+
+// 	select {
+// 	case postId = <-idCh:
+// 	case err = <-errCh:
+// 		s.tryWError(errCh, fail(op, err))
+// 		return
+// 	case <-ctx.Done():
+// 		s.tryWError(errCh, fail(op, ctx.Err()))
+// 		return
+// 	}
+
+// 	_, err = tx.ExecContext(ctx, deleteThemes, postId)
+// 	if err != nil {
+// 		s.tryWError(errCh, fail(op, err))
+// 		return
+// 	}
+
+// 	select {
+// 	case _idCh <- postId:
+// 	default:
+// 		s.tryWError(errCh, fail(op, storage.ErrBlockedChannel))
+// 		return
+// 	}
+
+// }
 
 func readChan[T any](
-	ctx context.Context,
-	cncl context.CancelFunc,
-	chDest chan resToChan[T],
-	chSrc chan resToChan[T],
-) {
-	var ret T
+	ch chan T,
+	errCh chan error,
+) (T, error) {
+	var res T
 
 	select {
-	case res := <-chSrc:
-		if res.err != nil {
-			cncl()
-			chDest <- resToChan[T]{ret, res.err}
-		}
-		chSrc <- resToChan[T]{res.val, nil}
-	case <-ctx.Done():
-		chDest <- resToChan[T]{ret, ctx.Err()}
+	case res = <-ch:
+	case err := <-errCh:
+		return res, err
 	}
 
+	return res, nil
 }
 
-type resToChan[T any] struct {
-	val T
-	err error
-}
+// func (s *Storage) T() {
+// 	tx, err := s.db.Begin()
+// 	if err != nil {
+// 		panic(err.Error())
+// 	}
 
-type intToChan = resToChan[int]
-type intSliceToChan = resToChan[[]int]
+// 	// stmt, err := tx.Prepare(`SELECT * FROM themes`)
+// 	// if err != nil {
+// 	// 	panic("stmt" + err.Error())
+// 	// }
+
+// 	rows := tx.QueryRow("SELECT * FROM themes")
+// 	stms2, err := tx.Prepare(`INSERT INTO post_theme(post_id, theme_id) VALUES($1, $1) `)
+// 	if err != nil {
+// 		panic("stms2" + err.Error())
+// 	}
+// 	if err != nil {
+// 		panic("rows" + err.Error())
+// 	}
+// 	_ = rows
+// 	// for rows.Next() {
+// 	// }
+
+// 	rows2, err := stms2.Query(0)
+// 	if err != nil {
+// 		panic("rows2" + err.Error())
+// 	}
+// 	_ = rows2
+// 	tx.Commit()
+// }
