@@ -3,54 +3,26 @@ package posts
 import (
 	"context"
 	"fmt"
-	"github.com/IlianBuh/Post-service/internal/lib/logger/sl"
 	"log/slog"
 	"time"
+
+	"github.com/IlianBuh/Post-service/internal/lib/logger/sl"
+	"github.com/IlianBuh/Post-service/internal/service/posts/interfaces/repository"
 )
 
 type PostService struct {
 	log     *slog.Logger
-	svr     Saver
-	updtr   Updater
-	dltr    Deleter
+	svr     repository.Saver
+	updtr   repository.Updater
+	dltr    repository.Deleter
 	timeout time.Duration
-}
-
-type Saver interface {
-	// Save saves the record. Return values: postId, error
-	Save(
-		ctx context.Context,
-		userId int,
-		header string,
-		contetn string,
-		themes []string,
-	) (int, error)
-}
-type Updater interface {
-	// Update updates the record. Return values: postId, error
-	Update(
-		ctx context.Context,
-		postId int,
-		userId int,
-		header string,
-		contetn string,
-		themes []string,
-	) (int, error)
-}
-type Deleter interface {
-	// Delete deletes the record. Return values: postId, error
-	Delete(
-		ctx context.Context,
-		postId int,
-		userId int,
-	) (int, error)
 }
 
 func New(
 	log *slog.Logger,
-	svr Saver,
-	updtr Updater,
-	dltr Deleter,
+	svr repository.Saver,
+	updtr repository.Updater,
+	dltr repository.Deleter,
 	timeout time.Duration,
 ) *PostService {
 	return &PostService{
