@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  psql:
+    container_name: postgres
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      PGDATA: /data/postgres
+    volumes:
+      - ./storage:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - db
+    
+  adminer:
+    container_name: admin
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: e@e.c
+      PGADMIN_DEFAULT_PASSWORD: admin
+    networks:
+      - db
+    ports:
+      - "80:80"
+      
+networks:
+  db:
+    driver: bridge
