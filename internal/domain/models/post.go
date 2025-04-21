@@ -1,9 +1,14 @@
 package models
 
+import (
+	"time"
+)
+
 type Post struct {
-	PostId  int
-	UserId  int
-	Header  string
-	Content string
-	Themes  []string
+	PostId    int
+	UserId    int
+	CreatedAt time.Time
+	Header    string
+	Content   string
+	Themes    []string
 }
