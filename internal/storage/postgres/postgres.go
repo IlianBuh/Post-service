@@ -10,7 +10,6 @@ import (
 	"github.com/IlianBuh/Post-service/internal/storage"
 	"github.com/IlianBuh/Post-service/internal/storage/events"
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 )
 
 type Storage struct {

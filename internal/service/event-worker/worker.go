@@ -140,7 +140,7 @@ func (w *Worker) handleEvents() error {
 		return fail(op, err)
 	}
 
-	err = w.deleter.Delete(ctx, ids)
+	err = w.deleter.DeleteEvent(ctx, ids)
 	if err != nil {
 		log.Error("failed to delete events", sl.Err(err))
 		return fail(op, err)
