@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/IlianBuh/Post-service/internal/domain/models"
 	"github.com/IlianBuh/Post-service/internal/storage"
+	"github.com/IlianBuh/Post-service/internal/storage/events"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -63,27 +66,37 @@ func (s *Storage) Save(
 		err    error
 		postId int
 	)
+	sendErr := func(err error) (int, error) {
+		return 0, fail(op, err)
+	}
 
 	if err = ctx.Err(); err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return sendErr(err)
 	}
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fail(op, err)
+		return sendErr(err)
 	}
 	defer tx.Rollback()
 
 	postId, err = s.save(ctx, tx, userId, &header, &content, themes)
 	if err != nil {
-		return 0, fail(op, err)
+		return sendErr(err)
+	}
+
+	payload := events.CollectEventPayload(userId, header)
+	eventId := events.CollectEventId(userId)
+	err = s.saveEvent(ctx, tx, eventId, events.TypeCteated, payload)
+	if err != nil {
+		return sendErr(err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return 0, fail(op, err)
+		return sendErr(err)
 	}
 
 	return postId, nil
@@ -188,6 +201,30 @@ func (*Storage) savePostThemeRelations(
 	return nil
 }
 
+// saveEvent saves new event
+func (s *Storage) saveEvent(
+	ctx context.Context,
+	tx *sql.Tx,
+	eventId string,
+	eventType string,
+	payload string,
+) error {
+	const (
+		op        = "postgres.saveEvent"
+		insrtStmt = `
+		INSERT INTO events(event_id, type, payload)
+		VALUES ($1, $2, $3);
+		`
+	)
+
+	_, err := tx.ExecContext(ctx, insrtStmt, eventId, eventType, payload)
+	if err != nil {
+		return fail(op, err)
+	}
+
+	return nil
+}
+
 func (s *Storage) Update(
 	ctx context.Context,
 	postId int,
@@ -211,7 +248,7 @@ func (s *Storage) Update(
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
-	rec, err = s.updatePostRec(ctx, postId, userId, header, content)
+	rec, err = s.makePostRec(ctx, postId, userId, header, content)
 	if err != nil {
 		return sendErr(err)
 	}
@@ -261,8 +298,8 @@ func (s *Storage) update(
 	return nil
 }
 
-// updatePostRec creates a record for new post information
-func (s *Storage) updatePostRec(
+// makePostRec creates a record for new post information
+func (s *Storage) makePostRec(
 	ctx context.Context,
 	postId int,
 	userId int,
@@ -584,6 +621,79 @@ func (s *Storage) Stop() error {
 	err := s.db.Close()
 	if err != nil {
 		return fail(op, storage.ErrClose)
+	}
+
+	return nil
+}
+
+// EventPage returns page of events. Page is a slice of limit size
+func (s *Storage) EventPage(ctx context.Context, limit int) ([]models.Event, error) {
+	const (
+		op        = "postgres.EventPage"
+		slctQuery = `
+		SELECT id, event_id, type, payload
+		FROM events
+		WHERE status != 'done' AND reserved_to < (NOW() AT TIME ZONE 'UTC-3')
+		LIMIT $1`
+	)
+	var (
+		events  []models.Event = make([]models.Event, 0, limit)
+		sendErr                = func(err error) ([]models.Event, error) { return nil, fail(op, err) }
+	)
+
+	rows, err := s.db.QueryContext(ctx, slctQuery, limit)
+	if err != nil {
+		return sendErr(err)
+	}
+	defer rows.Close()
+
+	var event models.Event
+	for rows.Next() {
+		if err = rows.Scan(&event.Id, &event.EventId, &event.Type, &event.Payload); err != nil {
+			return sendErr(err)
+		}
+
+		events = append(events, event)
+	}
+
+	if len(events) == 0 {
+		return sendErr(storage.ErrNoEvents)
+	}
+
+	return events, nil
+}
+
+// Reserve reserves events with id from ids list
+func (s *Storage) Reserve(ctx context.Context, ids []int) error {
+	const (
+		op        = "postgres.Reserve"
+		rsrvQuery = `
+		Update events 
+		SET reserved_to=((NOW() AT TIME ZONE 'UTC-3') + INTERVAL '5 minutes' )
+		WHERE id = ANY ($1)
+		`
+	)
+
+	_, err := s.db.ExecContext(ctx, rsrvQuery, pq.Array(ids))
+	if err != nil {
+		return fail(op, err)
+	}
+
+	return nil
+}
+
+// DeleteEvent deletes events with id from ids list
+func (s *Storage) DeleteEvent(ctx context.Context, ids []int) error {
+	const (
+		op       = "postgres.Delete"
+		dltQuery = `
+		UPDATE events SET status='done' WHERE id = ANY($1)
+		`
+	)
+
+	_, err := s.db.ExecContext(ctx, dltQuery, pq.Array(ids))
+	if err != nil {
+		return fail(op, err)
 	}
 
 	return nil
