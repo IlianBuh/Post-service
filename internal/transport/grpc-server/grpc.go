@@ -2,9 +2,11 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
 
 	"time"
 
+	"github.com/IlianBuh/Post-service/internal/service/posts"
 	"github.com/IlianBuh/Post-service/internal/transport/validate"
 	postv1 "github.com/IlianBuh/Posts-Protobuf/gen/go"
 	"google.golang.org/grpc"
@@ -74,6 +76,9 @@ func (s *ServerAPI) Create(ctx context.Context, req *postv1.CreateRequest) (*pos
 
 	postId, err := s.srvc.Create(ctx, int(req.GetUserId()), req.GetHeader(), req.GetContent(), req.GetThemes())
 	if err != nil {
+		if errors.Is(err, posts.ErrUserNotFound) {
+			return nil, status.Error(codes.InvalidArgument, "user does not exist")
+		}
 		return nil, status.Error(codes.Internal, codes.Internal.String())
 	}
 
