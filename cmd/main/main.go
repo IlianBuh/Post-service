@@ -1,10 +1,14 @@
 package main
 
 import (
-	"github.com/IlianBuh/Post-service/internal/config"
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/IlianBuh/Post-service/internal/app"
+	"github.com/IlianBuh/Post-service/internal/config"
 )
 
 const (
@@ -18,11 +22,21 @@ func main() {
 
 	log := setUpLogger(cfg.Env, os.Stdout)
 
-	log.Info("logger was initialized")
+	log.Info("logger was initialized", slog.Any("cfg", cfg))
 
-	// TODO : init application
+	application := app.New(log, cfg.GRPC, cfg.Storage, cfg.UserProvider, cfg.Kafka, cfg.EventWorker)
 
-	// TODO : start application
+	application.Start()
+
+	stop := make(chan os.Signal, 1)
+
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	sign := <-stop
+
+	log.Info("signal recieved", slog.Any("signal", sign))
+
+	application.Stop()
 }
 
 // setUpLogger returns set logger according to current environment
