@@ -18,12 +18,21 @@
     "grpc": {    
         "host":"localhost",
         "port": 9090,
-        "timeout": "10s"
+        "timeout": "100s"
     },
     "user-provider": {
-        "host": "",
-        "port": 0,
-        "timeout": "10s" 
+        "host": "user-provider",
+        "port": 20202,
+        "timeout": "100s" 
+    },
+    "kafka": {
+        "addrs": ["localhost:9092"],
+        "timeout": 10,
+        "retries": 5
+    },
+    "event-worker": {
+        "page-size": 10,
+        "interval": "1s"
     }
 }
 
