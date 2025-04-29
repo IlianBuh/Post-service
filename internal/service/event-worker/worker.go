@@ -50,6 +50,7 @@ func New(
 	pageProvider PageProvider,
 	reserver Reserver,
 	deleter Deleter,
+	sender Sender,
 	interval time.Duration,
 ) *Worker {
 	return &Worker{
@@ -59,6 +60,8 @@ func New(
 		deleter:      deleter,
 		reserver:     reserver,
 		interval:     interval,
+		timeout:      interval,
+		sender:       sender,
 		stop:         make(chan struct{}),
 	}
 }
@@ -91,6 +94,10 @@ func (w *Worker) Start(ctx context.Context) error {
 
 			err := w.handleEvents()
 			if err != nil {
+				if errors.Is(err, storage.ErrNoEvents) {
+					continue
+				}
+
 				log.Error("failed to handle events", sl.Err(err))
 			}
 		}
@@ -113,17 +120,19 @@ func (w *Worker) Stop() {
 func (w *Worker) handleEvents() error {
 	const op = "eventworker.handleEvents"
 	log := w.log.With(slog.String("op", op))
-	log.Info("starting to handle events")
 
 	ctx, cncl := context.WithTimeout(context.Background(), w.timeout)
 	defer cncl()
 
 	page, err := w.pageProvider.EventPage(ctx, w.pageSize)
 	if err != nil {
-
+		if errors.Is(err, storage.ErrNoEvents) {
+			return fail(op, err)
+		}
 		log.Error("failed to get event page", sl.Err(err))
 		return fail(op, err)
 	}
+	log.Info("starting to handle events")
 
 	ids := mapper.EventsToIds(page)
 
