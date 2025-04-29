@@ -10,7 +10,6 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/IlianBuh/Post-service/internal/domain/models"
 	"github.com/IlianBuh/Post-service/internal/lib/logger/sl"
-	"github.com/IlianBuh/Post-service/internal/storage/events"
 )
 
 const (
@@ -118,11 +117,11 @@ func (p *Producer) Send(ctx context.Context, page []models.Event) error {
 	defer cncl()
 
 	for _, event := range page {
-		eventmsg := events.CollectEventId(event.Id) + events.CollectEventPayload(event.EventId, event.Payload)
+		eventmsg := event.Id + ":" + event.Payload
 		msg = &sarama.ProducerMessage{
 			Topic:     eventsTopic,
 			Value:     sarama.ByteEncoder(eventmsg),
-			Key:       sarama.ByteEncoder(event.EventId),
+			Key:       sarama.ByteEncoder(event.Id),
 			Timestamp: time.Now(),
 		}
 
