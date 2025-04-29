@@ -18,11 +18,11 @@ type PageProvider interface {
 }
 
 type Deleter interface {
-	DeleteEvent(ctx context.Context, ids []int) error
+	DeleteEvent(ctx context.Context, ids []string) error
 }
 
 type Reserver interface {
-	Reserve(ctx context.Context, ids []int) error
+	Reserve(ctx context.Context, ids []string) error
 }
 
 type Sender interface {

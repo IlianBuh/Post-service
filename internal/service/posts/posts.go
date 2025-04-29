@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"errors"
+
 	"github.com/IlianBuh/Post-service/internal/lib/logger/sl"
 	extraresources "github.com/IlianBuh/Post-service/internal/service/posts/interfaces/extra-resources"
 	"github.com/IlianBuh/Post-service/internal/service/posts/interfaces/repository"
@@ -20,7 +21,6 @@ type PostService struct {
 	dltr     repository.Deleter
 	timeout  time.Duration
 	usrPrvdr extraresources.UserProvider
-	fllwPrv  extraresources.FollowingsProvider
 }
 
 func New(
@@ -30,7 +30,6 @@ func New(
 	dltr repository.Deleter,
 	timeout time.Duration,
 	usrPrvdr extraresources.UserProvider,
-	fllwPrv extraresources.FollowingsProvider,
 ) *PostService {
 	return &PostService{
 		log:      log,
@@ -39,7 +38,6 @@ func New(
 		dltr:     dltr,
 		timeout:  timeout,
 		usrPrvdr: usrPrvdr,
-		fllwPrv:  fllwPrv,
 	}
 }
 
