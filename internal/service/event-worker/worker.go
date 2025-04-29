@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/IlianBuh/Post-service/internal/domain/models"
@@ -39,6 +40,7 @@ type Worker struct {
 	stop         chan struct{}
 	ticker       *time.Ticker
 	timeout      time.Duration
+	wg           sync.WaitGroup
 }
 
 func New(
@@ -64,10 +66,10 @@ func (w *Worker) Start(ctx context.Context, interval time.Duration) error {
 	log := w.log.With(slog.String("op", op))
 
 	w.ticker = time.NewTicker(interval)
-
+	w.wg.Add(1)
 	go func() {
 		defer func() {
-			w.stop <- struct{}{}
+			w.wg.Done()
 		}()
 
 		for {
@@ -101,9 +103,9 @@ func (w *Worker) Stop() {
 	w.log.Info("starting to stop worker", slog.String("op", op))
 
 	w.stop <- struct{}{}
-	<-w.stop
 
 	close(w.stop)
+	w.wg.Wait()
 }
 
 func (w *Worker) handleEvents() error {
