@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/IlianBuh/Post-service/internal/domain/models"
@@ -18,11 +19,11 @@ type PageProvider interface {
 }
 
 type Deleter interface {
-	DeleteEvent(ctx context.Context, ids []int) error
+	DeleteEvent(ctx context.Context, ids []string) error
 }
 
 type Reserver interface {
-	Reserve(ctx context.Context, ids []int) error
+	Reserve(ctx context.Context, ids []string) error
 }
 
 type Sender interface {
@@ -39,6 +40,8 @@ type Worker struct {
 	stop         chan struct{}
 	ticker       *time.Ticker
 	timeout      time.Duration
+	interval     time.Duration
+	wg           sync.WaitGroup
 }
 
 func New(
@@ -47,6 +50,7 @@ func New(
 	pageProvider PageProvider,
 	reserver Reserver,
 	deleter Deleter,
+	sender Sender,
 	interval time.Duration,
 ) *Worker {
 	return &Worker{
@@ -55,19 +59,22 @@ func New(
 		pageProvider: pageProvider,
 		deleter:      deleter,
 		reserver:     reserver,
+		interval:     interval,
+		timeout:      interval,
+		sender:       sender,
 		stop:         make(chan struct{}),
 	}
 }
 
-func (w *Worker) Start(ctx context.Context, interval time.Duration) error {
+func (w *Worker) Start(ctx context.Context) error {
 	const op = "eventworker.Start"
 	log := w.log.With(slog.String("op", op))
 
-	w.ticker = time.NewTicker(interval)
-
+	w.ticker = time.NewTicker(w.interval)
+	w.wg.Add(1)
 	go func() {
 		defer func() {
-			w.stop <- struct{}{}
+			w.wg.Done()
 		}()
 
 		for {
@@ -87,6 +94,10 @@ func (w *Worker) Start(ctx context.Context, interval time.Duration) error {
 
 			err := w.handleEvents()
 			if err != nil {
+				if errors.Is(err, storage.ErrNoEvents) {
+					continue
+				}
+
 				log.Error("failed to handle events", sl.Err(err))
 			}
 		}
@@ -101,25 +112,27 @@ func (w *Worker) Stop() {
 	w.log.Info("starting to stop worker", slog.String("op", op))
 
 	w.stop <- struct{}{}
-	<-w.stop
 
 	close(w.stop)
+	w.wg.Wait()
 }
 
 func (w *Worker) handleEvents() error {
 	const op = "eventworker.handleEvents"
 	log := w.log.With(slog.String("op", op))
-	log.Info("starting to handle events")
 
 	ctx, cncl := context.WithTimeout(context.Background(), w.timeout)
 	defer cncl()
 
 	page, err := w.pageProvider.EventPage(ctx, w.pageSize)
 	if err != nil {
-
+		if errors.Is(err, storage.ErrNoEvents) {
+			return fail(op, err)
+		}
 		log.Error("failed to get event page", sl.Err(err))
 		return fail(op, err)
 	}
+	log.Info("starting to handle events")
 
 	ids := mapper.EventsToIds(page)
 

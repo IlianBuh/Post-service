@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/IlianBuh/Post-service/internal/domain/models"
 	"github.com/IlianBuh/Post-service/internal/storage"
@@ -86,7 +87,11 @@ func (s *Storage) Save(
 		return sendErr(err)
 	}
 
-	payload := events.CollectEventPayload(userId, header)
+	payload, err := events.CollectEventPayload(userId, header, time.Now())
+	if err != nil {
+		return 0, fail(op, err)
+	}
+
 	eventId := events.CollectEventId(userId)
 	err = s.saveEvent(ctx, tx, eventId, events.TypeCteated, payload)
 	if err != nil {
@@ -211,7 +216,7 @@ func (s *Storage) saveEvent(
 	const (
 		op        = "postgres.saveEvent"
 		insrtStmt = `
-		INSERT INTO events(event_id, type, payload)
+		INSERT INTO events(uid, type, payload)
 		VALUES ($1, $2, $3);
 		`
 	)
@@ -630,7 +635,7 @@ func (s *Storage) EventPage(ctx context.Context, limit int) ([]models.Event, err
 	const (
 		op        = "postgres.EventPage"
 		slctQuery = `
-		SELECT id, event_id, type, payload
+		SELECT uid, type, payload
 		FROM events
 		WHERE status != 'done' AND reserved_to < (NOW() AT TIME ZONE 'UTC-3')
 		LIMIT $1`
@@ -648,7 +653,7 @@ func (s *Storage) EventPage(ctx context.Context, limit int) ([]models.Event, err
 
 	var event models.Event
 	for rows.Next() {
-		if err = rows.Scan(&event.Id, &event.EventId, &event.Type, &event.Payload); err != nil {
+		if err = rows.Scan(&event.Id, &event.Type, &event.Payload); err != nil {
 			return sendErr(err)
 		}
 
@@ -663,13 +668,13 @@ func (s *Storage) EventPage(ctx context.Context, limit int) ([]models.Event, err
 }
 
 // Reserve reserves events with id from ids list
-func (s *Storage) Reserve(ctx context.Context, ids []int) error {
+func (s *Storage) Reserve(ctx context.Context, ids []string) error {
 	const (
 		op        = "postgres.Reserve"
 		rsrvQuery = `
 		Update events 
 		SET reserved_to=((NOW() AT TIME ZONE 'UTC-3') + INTERVAL '5 minutes' )
-		WHERE id = ANY ($1)
+		WHERE uid = ANY ($1)
 		`
 	)
 
@@ -682,11 +687,11 @@ func (s *Storage) Reserve(ctx context.Context, ids []int) error {
 }
 
 // DeleteEvent deletes events with id from ids list
-func (s *Storage) DeleteEvent(ctx context.Context, ids []int) error {
+func (s *Storage) DeleteEvent(ctx context.Context, ids []string) error {
 	const (
 		op       = "postgres.Delete"
 		dltQuery = `
-		UPDATE events SET status='done' WHERE id = ANY($1)
+		UPDATE events SET status='done' WHERE uid = ANY($1)
 		`
 	)
 

@@ -10,5 +10,5 @@ type Deleter interface {
 		ctx context.Context,
 		postId int,
 		userId int,
-	) (int, error)
+	) error
 }

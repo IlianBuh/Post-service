@@ -1,7 +1,7 @@
 package storage
 
 // Storage object representation of json data
-type Storage struct {
+type Config struct {
 	DBName   string `json:"dbname"`
 	User     string `json:"user"`
 	Password string `json:"password"`

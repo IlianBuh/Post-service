@@ -5,7 +5,7 @@ import (
 )
 
 type Post struct {
-	PostId    int
+	Id        int
 	UserId    int
 	CreatedAt time.Time
 	Header    string

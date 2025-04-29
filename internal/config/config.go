@@ -6,16 +6,20 @@ import (
 	"fmt"
 	"os"
 
+	eventworker "github.com/IlianBuh/Post-service/internal/config/event-worker"
 	"github.com/IlianBuh/Post-service/internal/config/grpcobj"
+	"github.com/IlianBuh/Post-service/internal/config/kafka"
 	"github.com/IlianBuh/Post-service/internal/config/storage"
 	userProvider "github.com/IlianBuh/Post-service/internal/config/user-provider"
 )
 
 type Config struct {
-	Env          string                    `json:"env"`
-	Storage      storage.Storage           `json:"storage"`
-	GRPC         grpcobj.GRPCObj           `json:"grpc"`
-	UserProvider userProvider.UserProvider `json:"user-provider"`
+	Env          string              `json:"env"`
+	Storage      storage.Config      `json:"storage"`
+	GRPC         grpcobj.Config      `json:"grpc"`
+	UserProvider userProvider.Config `json:"user-provider"`
+	Kafka        kafka.Config        `json:"kafka"`
+	EventWorker  eventworker.Config  `json:"event-worker"`
 }
 
 const (

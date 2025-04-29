@@ -5,7 +5,7 @@ import (
 )
 
 // GRPCObj object representation of json data
-type GRPCObj struct {
+type Config struct {
 	Host    string            `json:"host"`
 	Port    int               `json:"port"`
 	Timeout duration.Duration `json:"timeout"`

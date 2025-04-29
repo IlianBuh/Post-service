@@ -2,9 +2,11 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
 
 	"time"
 
+	"github.com/IlianBuh/Post-service/internal/service/posts"
 	"github.com/IlianBuh/Post-service/internal/transport/validate"
 	postv1 "github.com/IlianBuh/Posts-Protobuf/gen/go"
 	"google.golang.org/grpc"
@@ -21,7 +23,7 @@ type PostService interface {
 		header string,
 		content string,
 		themes []string,
-	) error
+	) (int, error)
 
 	// Update updates all post fields with postId.
 	// If the value is the default value (zero value), the old value will be saved.
@@ -72,12 +74,15 @@ func (s *ServerAPI) Create(ctx context.Context, req *postv1.CreateRequest) (*pos
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	err = s.srvc.Create(ctx, int(req.GetUserId()), req.GetHeader(), req.GetContent(), req.GetThemes())
+	postId, err := s.srvc.Create(ctx, int(req.GetUserId()), req.GetHeader(), req.GetContent(), req.GetThemes())
 	if err != nil {
+		if errors.Is(err, posts.ErrUserNotFound) {
+			return nil, status.Error(codes.InvalidArgument, "user does not exist")
+		}
 		return nil, status.Error(codes.Internal, codes.Internal.String())
 	}
 
-	return &postv1.CreateResponse{}, nil
+	return &postv1.CreateResponse{PostId: int64(postId)}, nil
 }
 
 // Update makes request to service layer to change the existing post
