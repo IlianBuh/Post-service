@@ -98,7 +98,7 @@ func (p *PostService) Update(
 	header string,
 	content string,
 	themes []string,
-) (int, error) {
+) (error) {
 	const op = "post-service.Update"
 	log := p.log.With("op", op)
 	log.Info(
@@ -112,8 +112,8 @@ func (p *PostService) Update(
 	defer log.Info("updating post ended")
 
 	var err error
-	sendErr := func(err error) (int, error) {
-		return 0, errs.Fail(op, err)
+	sendErr := func(err error) (error) {
+		return errs.Fail(op, err)
 	}
 
 	if err = ctx.Err(); err != nil {
@@ -147,7 +147,7 @@ func (p *PostService) Update(
 		return sendErr(ErrInternal)
 	}
 
-	return postId, nil
+	return nil
 }
 
 // Delete deletes post with postId. Return posts' id which must be
@@ -157,7 +157,7 @@ func (p *PostService) Delete(
 	ctx context.Context,
 	postId int,
 	userId int,
-) (int, error) {
+) error {
 	const op = "post-service.Delete"
 	log := p.log.With("op", op)
 	log.Info("starting deleting post",
@@ -167,8 +167,8 @@ func (p *PostService) Delete(
 	defer log.Info("deleting ended")
 
 	var err error
-	sendErr := func(err error) (int, error) {
-		return 0, errs.Fail(op, err)
+	sendErr := func(err error) error {
+		return errs.Fail(op, err)
 	}
 
 	if err = ctx.Err(); err != nil {
@@ -179,7 +179,7 @@ func (p *PostService) Delete(
 	ctx, cncl := context.WithTimeout(ctx, p.timeout)
 	defer cncl()
 
-	postId, err = p.dltr.Delete(ctx, postId, userId)
+	err = p.dltr.Delete(ctx, postId, userId)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotCreator) {
 			log.Warn(
@@ -195,7 +195,7 @@ func (p *PostService) Delete(
 		return sendErr(ErrInternal)
 	}
 
-	return postId, nil
+	return nil
 }
 
 // checkUserExisting checks if user exists. If user does not exist,
