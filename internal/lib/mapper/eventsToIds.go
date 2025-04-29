@@ -2,12 +2,12 @@ package mapper
 
 import "github.com/IlianBuh/Post-service/internal/domain/models"
 
-func EventsToIds(events []models.Event) []int {
+func EventsToIds(events []models.Event) []string {
 	length := len(events)
-	res := make([]int, length)
+	res := make([]string, length)
 
-	for i := 0; i < length; i++ {
-		res[i] = events[i].Id
+	for i, event := range events {
+		res[i] = event.Id
 	}
 
 	return res
