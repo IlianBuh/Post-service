@@ -40,6 +40,7 @@ type Worker struct {
 	stop         chan struct{}
 	ticker       *time.Ticker
 	timeout      time.Duration
+	interval     time.Duration
 	wg           sync.WaitGroup
 }
 
@@ -57,15 +58,16 @@ func New(
 		pageProvider: pageProvider,
 		deleter:      deleter,
 		reserver:     reserver,
+		interval:     interval,
 		stop:         make(chan struct{}),
 	}
 }
 
-func (w *Worker) Start(ctx context.Context, interval time.Duration) error {
+func (w *Worker) Start(ctx context.Context) error {
 	const op = "eventworker.Start"
 	log := w.log.With(slog.String("op", op))
 
-	w.ticker = time.NewTicker(interval)
+	w.ticker = time.NewTicker(w.interval)
 	w.wg.Add(1)
 	go func() {
 		defer func() {
