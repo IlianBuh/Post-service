@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/IlianBuh/Post-service/internal/app/app"
+	grpcapp "github.com/IlianBuh/Post-service/internal/app/app"
+	cfgEventWorker "github.com/IlianBuh/Post-service/internal/config/event-worker"
 	"github.com/IlianBuh/Post-service/internal/config/grpcobj"
+	cfgKafka "github.com/IlianBuh/Post-service/internal/config/kafka"
 	cfgStorage "github.com/IlianBuh/Post-service/internal/config/storage"
 	cfgUsrPrvdr "github.com/IlianBuh/Post-service/internal/config/user-provider"
-	"github.com/IlianBuh/Post-service/internal/service/event-worker"
+	eventworker "github.com/IlianBuh/Post-service/internal/service/event-worker"
 	"github.com/IlianBuh/Post-service/internal/service/posts"
 	"github.com/IlianBuh/Post-service/internal/storage/postgres"
 	"github.com/IlianBuh/Post-service/internal/transport/kafka"
@@ -27,10 +29,11 @@ type App struct {
 
 func New(
 	log *slog.Logger,
-	cfgGRPC grpcobj.GRPCObj,
-	cfgStrg cfgStorage.Storage,
-	cfgUsrPrvdr cfgUsrPrvdr.UserProvider,
-	// cfg
+	cfgGRPC grpcobj.Config,
+	cfgStrg cfgStorage.Config,
+	cfgUsrPrvdr cfgUsrPrvdr.Config,
+	cfgKafka cfgKafka.Config,
+	cfgEventWorker cfgEventWorker.Config,
 ) *App {
 	const op = "app.New"
 	fail := func(err error) {
@@ -70,12 +73,12 @@ func New(
 	producer, err := kafka.NewProducer(
 		context.Background(),
 		log,
-		cfgKafka.addrs,
+		cfgKafka.Addrs,
 		cfgKafka.Timeout,
 		cfgKafka.Retries,
 	)
 	if err != nil {
-		fail(op, err)
+		fail(err)
 	}
 
 	// TODO : init event-worker
@@ -85,7 +88,8 @@ func New(
 		repo,
 		repo,
 		repo,
-		cfgEventWorker.Inteval,
+		producer,
+		cfgEventWorker.Interval.Duration,
 	)
 
 	return &App{
