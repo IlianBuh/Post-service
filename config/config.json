@@ -21,7 +21,7 @@
         "timeout": "100s"
     },
     "user-provider": {
-        "host": "user-provider",
+        "host": "localhost",
         "port": 20202,
         "timeout": "100s" 
     },
