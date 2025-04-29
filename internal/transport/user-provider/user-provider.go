@@ -11,6 +11,7 @@ import (
 	"github.com/IlianBuh/Post-service/pkg/errors"
 	userinfov1 "github.com/IlianBuh/SSO_Protobuf/gen/go/userinfo"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type UserProvider struct {
@@ -30,6 +31,7 @@ func New(
 
 	cc, err := grpc.NewClient(
 		composeServerAddress(host, port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return nil, errors.Fail(op, err)
