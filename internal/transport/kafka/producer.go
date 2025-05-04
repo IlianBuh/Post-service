@@ -117,7 +117,7 @@ func (p *Producer) Send(ctx context.Context, page []models.Event) error {
 	defer cncl()
 
 	for _, event := range page {
-		eventmsg := event.Id + ":" + event.Payload
+		eventmsg := event.Payload
 		msg = &sarama.ProducerMessage{
 			Topic:     eventsTopic,
 			Value:     sarama.ByteEncoder(eventmsg),
