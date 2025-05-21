@@ -9,6 +9,7 @@ type Saver interface {
 	Save(
 		ctx context.Context,
 		userId int,
+		login string,
 		header string,
 		contetn string,
 		themes []string,

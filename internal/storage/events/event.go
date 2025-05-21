@@ -13,15 +13,29 @@ const (
 )
 
 type EventPayload struct {
-	UserId    int       `json:"user-id"`
+	Author    Author    `json:"author"`
 	Header    string    `json:"header"`
 	CreatedAt time.Time `json:"created-at"`
 }
 
-func CollectEventPayload(id int, header string, createdAt time.Time) (string, error) {
+type Author struct {
+	Id    int    `json:"id"`
+	Login string `json:"login"`
+}
+
+func CollectEventPayload(id int, login string, header string, createdAt time.Time) (string, error) {
 	const op = "event.CollectEventPayload"
 
-	payload, err := json.Marshal(EventPayload{id, header, createdAt})
+	payload, err := json.Marshal(
+		EventPayload{
+			Author{
+				Id:    id,
+				Login: login,
+			},
+			header,
+			createdAt,
+		},
+	)
 	if err != nil {
 		return "", e.Fail(op, err)
 	}

@@ -1,0 +1,3 @@
+ALTER TABLE posts 
+ADD COLUMN login TEXT DEFAULT 'unknown'
+NOT NULL;

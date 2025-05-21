@@ -20,6 +20,7 @@ type PostService interface {
 	Create(
 		ctx context.Context,
 		userId int,
+		login string,
 		header string,
 		content string,
 		themes []string,
@@ -74,7 +75,14 @@ func (s *ServerAPI) Create(ctx context.Context, req *postv1.CreateRequest) (*pos
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	postId, err := s.srvc.Create(ctx, int(req.GetUserId()), req.GetHeader(), req.GetContent(), req.GetThemes())
+	postId, err := s.srvc.Create(
+		ctx,
+		int(req.GetUserId()),
+		req.GetLogin(),
+		req.GetHeader(),
+		req.GetContent(),
+		req.GetThemes(),
+	)
 	if err != nil {
 		if errors.Is(err, posts.ErrUserNotFound) {
 			return nil, status.Error(codes.InvalidArgument, "user does not exist")

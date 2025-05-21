@@ -46,6 +46,7 @@ func New(
 func (p *PostService) Create(
 	ctx context.Context,
 	userId int,
+	login string,
 	header string,
 	content string,
 	themes []string,
@@ -78,7 +79,7 @@ func (p *PostService) Create(
 		return sendErr(err)
 	}
 
-	postId, err := p.svr.Save(ctx, userId, header, content, themes)
+	postId, err := p.svr.Save(ctx, userId, login, header, content, themes)
 	if err != nil {
 		log.Error("failed to save post", sl.Err(err))
 		return sendErr(ErrInternal)
@@ -98,7 +99,7 @@ func (p *PostService) Update(
 	header string,
 	content string,
 	themes []string,
-) (error) {
+) error {
 	const op = "post-service.Update"
 	log := p.log.With("op", op)
 	log.Info(
@@ -112,7 +113,7 @@ func (p *PostService) Update(
 	defer log.Info("updating post ended")
 
 	var err error
-	sendErr := func(err error) (error) {
+	sendErr := func(err error) error {
 		return errs.Fail(op, err)
 	}
 

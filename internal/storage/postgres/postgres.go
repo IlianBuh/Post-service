@@ -57,6 +57,7 @@ func New(
 func (s *Storage) Save(
 	ctx context.Context,
 	userId int,
+	login string,
 	header string,
 	content string,
 	themes []string,
@@ -82,12 +83,12 @@ func (s *Storage) Save(
 	}
 	defer tx.Rollback()
 
-	postId, err = s.save(ctx, tx, userId, &header, &content, themes)
+	postId, err = s.save(ctx, tx, userId, &login, &header, &content, themes)
 	if err != nil {
 		return sendErr(err)
 	}
 
-	payload, err := events.CollectEventPayload(userId, header, time.Now())
+	payload, err := events.CollectEventPayload(userId, login, header, time.Now())
 	if err != nil {
 		return 0, fail(op, err)
 	}
@@ -111,6 +112,7 @@ func (s *Storage) save(
 	ctx context.Context,
 	tx *sql.Tx,
 	userId int,
+	login *string,
 	header *string,
 	content *string,
 	themes []string,
@@ -124,7 +126,7 @@ func (s *Storage) save(
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
-	postId, thmIds, err := s.fetchAllIds(ctx, tx, userId, header, content, themes)
+	postId, thmIds, err := s.fetchAllIds(ctx, tx, userId, login, header, content, themes)
 	if err != nil {
 		return sendErr(err)
 	}
@@ -142,14 +144,15 @@ func (s *Storage) savePost(
 	ctx context.Context,
 	tx *sql.Tx,
 	userId int,
+	login *string,
 	header *string,
 	content *string,
 ) (postId int, err error) {
 	const (
 		op            = "postgres.savePost"
 		insertNewPost = `
-			INSERT INTO posts(user_id, header, content)
-			VALUES($1, $2, $3)
+			INSERT INTO posts(user_id, login, header, content)
+			VALUES($1, $2, $3, $4)
 			RETURNING post_id`
 	)
 	sendErr := func(err error) (int, error) {
@@ -162,7 +165,7 @@ func (s *Storage) savePost(
 	}
 	defer insrtStmt.Close()
 
-	row := insrtStmt.QueryRowContext(ctx, userId, *header, *content)
+	row := insrtStmt.QueryRowContext(ctx, userId, *login, *header, *content)
 	if err = row.Scan(&postId); err != nil {
 		return sendErr(err)
 	}
@@ -480,6 +483,7 @@ func (s *Storage) fetchAllIds(
 	ctx context.Context,
 	tx *sql.Tx,
 	userId int,
+	login *string,
 	header *string,
 	content *string,
 	themes []string,
@@ -495,7 +499,7 @@ func (s *Storage) fetchAllIds(
 		return sendErr(err)
 	}
 
-	postId, err = s.savePost(ctx, tx, userId, header, content)
+	postId, err = s.savePost(ctx, tx, userId, login, header, content)
 	if err != nil {
 		return sendErr(err)
 	}
