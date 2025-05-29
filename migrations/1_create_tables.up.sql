@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS themes (
 );
 
 CREATE TABLE IF NOT EXISTS post_theme(
-    post_id INT REFERENCES posts(post_id),
-    theme_id INT REFERENCES themes(theme_id),
+    post_id INT REFERENCES posts(post_id) ON DELETE CASCADE,
+    theme_id INT REFERENCES themes(theme_id) ON DELETE CASCADE,
     PRIMARY KEY (post_id, theme_id)
 );
 
