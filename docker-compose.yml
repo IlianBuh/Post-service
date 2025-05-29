@@ -15,19 +15,20 @@ services:
       - "5432:5432"
     networks:
       - db
-    
-  adminer:
-    container_name: admin
-    image: dpage/pgadmin4
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: e@e.c
-      PGADMIN_DEFAULT_PASSWORD: admin
-    networks:
-      - db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 7s
+      timeout: 5s
+      retries: 1
+          
+  kafka:
+    image: apache/kafka
+    container_name: kafka
     ports:
-      - "80:80"
-      
+      - '9092:9092'
+      - '29092:29092'   
+
+
 networks:
   db:
     driver: bridge

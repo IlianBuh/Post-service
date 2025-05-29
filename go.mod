@@ -5,15 +5,16 @@ go 1.24.0
 require (
 	github.com/IBM/sarama v1.45.1
 	github.com/IlianBuh/Posts-Protobuf v0.0.5
-	github.com/IlianBuh/SSO_Protobuf v0.0.4
+	github.com/IlianBuh/SSO_Protobuf v0.0.12
+	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.1
 	github.com/lib/pq v1.10.9
+	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.72.0
 )
 
 require (
-	github.com/brianvoe/gofakeit v3.18.0+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
@@ -31,7 +32,6 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
