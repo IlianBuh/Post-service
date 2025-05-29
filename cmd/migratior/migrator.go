@@ -18,7 +18,7 @@ func main() {
 		migrationsPath string
 	)
 
-	flag.StringVar(&migrationsPath, "migrations-path", "", "path to directory with migration files")
+	flag.StringVar(&migrationsPath, "migrations-path", "./migrations", "path to directory with migration files")
 	cfg := config.New().Storage
 
 	conn := fmt.Sprintf(
@@ -32,7 +32,7 @@ func main() {
 	)
 	if err != nil {
 		slog.Error("failed to create new migrator instance", sl.Err(err))
-		return
+		panic("FAIL")
 	}
 	err = m.Up()
 	if err != nil {
@@ -41,6 +41,8 @@ func main() {
 			return
 		}
 		slog.Error("failed to migrate", sl.Err(err))
-		return
+		panic("FAIL")
 	}
+
+	slog.Info("migration is completed")
 }
