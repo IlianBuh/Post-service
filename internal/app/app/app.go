@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/IlianBuh/Post-service/internal/lib/errors"
 	"github.com/IlianBuh/Post-service/internal/service/posts"
 	grpcserver "github.com/IlianBuh/Post-service/internal/transport/grpc-server"
-	"github.com/IlianBuh/Post-service/pkg/errors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

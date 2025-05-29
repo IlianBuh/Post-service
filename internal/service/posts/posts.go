@@ -7,11 +7,11 @@ import (
 
 	"errors"
 
+	errs "github.com/IlianBuh/Post-service/internal/lib/errors"
 	"github.com/IlianBuh/Post-service/internal/lib/logger/sl"
 	extraresources "github.com/IlianBuh/Post-service/internal/service/posts/interfaces/extra-resources"
 	"github.com/IlianBuh/Post-service/internal/service/posts/interfaces/repository"
 	"github.com/IlianBuh/Post-service/internal/storage"
-	errs "github.com/IlianBuh/Post-service/pkg/errors"
 )
 
 type PostService struct {
@@ -94,8 +94,8 @@ func (p *PostService) Create(
 // Only [ErrInternal], [ErrNotCreator] or [ErrNotFound] can be returned as an error
 func (p *PostService) Update(
 	ctx context.Context,
-	postId int,
 	userId int,
+	postId int,
 	header string,
 	content string,
 	themes []string,

@@ -43,7 +43,7 @@ func New(
 
 	db, err := sql.Open("postgres", conn)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("%s; %s: %w", conn, op, err)
 	}
 
 	err = db.Ping()

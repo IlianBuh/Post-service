@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	initialRetryTime = 1
+	initialRetryTime = 0
 )
 
 var (
@@ -41,13 +41,10 @@ func NewProducer(
 	cfg.Producer.Retry.Max = retries
 	cfg.Producer.Timeout = time.Duration(maxTimeout * int(time.Second))
 
-	fmt.Println("start to testing")
 	p, err := sarama.NewAsyncProducer(
 		addrs,
 		cfg,
 	)
-
-	fmt.Println("start to testing")
 	if err != nil {
 		return tryToCreateProducer(ctx, log, addrs, cfg, maxTimeout, retries)
 	}

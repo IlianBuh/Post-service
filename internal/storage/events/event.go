@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	e "github.com/IlianBuh/Post-service/pkg/errors"
+	e "github.com/IlianBuh/Post-service/internal/lib/errors"
 )
 
 const (

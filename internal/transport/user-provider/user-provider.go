@@ -7,8 +7,8 @@ import (
 
 	"time"
 
+	"github.com/IlianBuh/Post-service/internal/lib/errors"
 	"github.com/IlianBuh/Post-service/internal/lib/logger/sl"
-	"github.com/IlianBuh/Post-service/pkg/errors"
 	userinfov1 "github.com/IlianBuh/SSO_Protobuf/gen/go/userinfo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
